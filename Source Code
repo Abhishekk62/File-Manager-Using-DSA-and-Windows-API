@@ -1,0 +1,309 @@
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <stack>
+#include <queue>
+#include <list>
+#include <vector>
+#include <windows.h>
+#include <direct.h>
+#include <sys/stat.h>
+#include <ctime>
+#include <algorithm>
+
+using namespace std;
+
+class FileManager {
+
+    list<string> directoryHistory;
+    vector<string> operationHistory;
+
+    void logOperation(const string &operation) {
+        operationHistory.push_back(operation);
+    }
+
+public:
+    void navigateTo(const string &path) {
+        if (_chdir(path.c_str()) == 0) {
+            directoryHistory.push_back(path);
+            logOperation("Navigated to: " + path);
+            cout << "Current Directory: " << path << endl;
+        } else {
+            cout << "Invalid directory path: " << path << endl;
+        }
+    }
+
+    void showDirectoryHistory() {
+        cout << "Directory History:" << endl;
+        for (const auto &dir : directoryHistory) {
+            cout << dir << endl;
+        }
+    }
+
+    void createFile(const string &fileName) {
+        ofstream file(fileName);
+        if (file) {
+            logOperation("Created file: " + fileName);
+            cout << "File created: " << fileName << endl;
+        } else {
+            cout << "Failed to create file: " << fileName << endl;
+        }
+    }
+
+    void createDirectory(const string &dirName) {
+        if (_mkdir(dirName.c_str()) == 0) {
+            logOperation("Created directory: " + dirName);
+            cout << "Directory created: " << dirName << endl;
+        } else {
+            cout << "Failed to create directory: " << dirName << endl;
+        }
+    }
+
+    void deleteFileOrDirectory(const string &path) {
+        if (DeleteFile(path.c_str())) {
+            logOperation("Deleted file: " + path);
+            cout << "Deleted file: " + path << endl;
+        } else if (RemoveDirectory(path.c_str())) {
+            logOperation("Deleted directory: " + path);
+            cout << "Deleted directory: " + path << endl;
+        } else {
+            cout << "Failed to delete: " + path << endl;
+        }
+    }
+
+    void batchCopy(const vector<string> &files, const string &destDir) {
+        for (const auto &file : files) {
+            string dest = destDir + "\\" + file;
+            if (CopyFile(file.c_str(), dest.c_str(), FALSE)) {
+                logOperation("Copied " + file + " to " + dest);
+                cout << "Copied: " + file + " to " + dest << endl;
+            } else {
+                cout << "Failed to copy: " + file << endl;
+            }
+        }
+    }
+
+    void viewFileProperties(const string &fileName) {
+        struct stat fileStat;
+        if (stat(fileName.c_str(), &fileStat) == 0) {
+            cout << "File: " << fileName << endl;
+            cout << "Size: " << fileStat.st_size << " bytes" << endl;
+            time_t modTime = fileStat.st_mtime;
+            cout << "Last Modified: " << ctime(&modTime);
+            logOperation("Viewed properties of: " + fileName);
+        } else {
+            cout << "File does not exist: " << fileName << endl;
+        }
+    }
+
+    void searchFiles(const string &pattern, const string &path = ".") {
+        WIN32_FIND_DATA findFileData;
+        HANDLE hFind = FindFirstFile((path + "\\*").c_str(), &findFileData);
+
+        if (hFind == INVALID_HANDLE_VALUE) {
+            cout << "Invalid directory: " << path << endl;
+            return;
+        }
+
+        do {
+            string fileName = findFileData.cFileName;
+            if (fileName.find(pattern) != string::npos) {
+                cout << "Found: " + path + "\\" + fileName << endl;
+                logOperation("Found file: " + path + "\\" + fileName);
+            }
+
+            if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY &&
+                fileName != "." && fileName != "..") {
+                searchFiles(pattern, path + "\\" + fileName);
+            }
+        } while (FindNextFile(hFind, &findFileData) != 0);
+
+        FindClose(hFind);
+    }
+
+    void sortFiles(const string &path = ".", const string &criteria = "name") {
+        vector<pair<string, struct stat>> files;
+
+        WIN32_FIND_DATA findFileData;
+        HANDLE hFind = FindFirstFile((path + "\\*").c_str(), &findFileData);
+
+        if (hFind == INVALID_HANDLE_VALUE) {
+            cout << "Invalid directory: " << path << endl;
+            return;
+        }
+
+        do {
+            string fileName = findFileData.cFileName;
+            if (fileName == "." || fileName == "..")
+                continue;
+
+            struct stat fileStat;
+            if (stat((path + "\\" + fileName).c_str(), &fileStat) == 0) {
+                files.push_back({fileName, fileStat});
+            }
+        } while (FindNextFile(hFind, &findFileData) != 0);
+
+        FindClose(hFind);
+
+        if (criteria == "name") {
+            sort(files.begin(), files.end(), [](const auto &a, const auto &b) {
+                return a.first < b.first;
+            });
+        } else if (criteria == "size") {
+            sort(files.begin(), files.end(), [](const auto &a, const auto &b) {
+                return a.second.st_size < b.second.st_size;
+            });
+        } else if (criteria == "time") {
+            sort(files.begin(), files.end(), [](const auto &a, const auto &b) {
+                return a.second.st_mtime < b.second.st_mtime;
+            });
+        } else {
+            cout << "Invalid sorting criteria. Use 'name', 'size', or 'time'." << endl;
+            return;
+        }
+
+        cout << "Sorted Files (" << criteria << "):" << endl;
+        for (const auto &file : files) {
+            cout << "Name: " << file.first << " | Size: " << file.second.st_size
+                 << " bytes | Last Modified: " << ctime(&file.second.st_mtime);
+        }
+
+        logOperation("Sorted files in " + path + " by " + criteria);
+    }
+
+    void moveFileOrDirectory(const string &source, const string &destination) {
+        if (MoveFile(source.c_str(), destination.c_str())) {
+            logOperation("Moved " + source + " to " + destination);
+            cout << "Successfully moved: " + source + " to " + destination << endl;
+        } else {
+            cout << "Failed to move: " + source + " to " + destination << endl;
+        }
+    }
+
+    void showOperationHistory() {
+        cout << "Operation History:" << endl;
+        for (const auto &op : operationHistory) {
+            cout << op << endl;
+        }
+    }
+};
+
+int main() {
+    FileManager fm;
+    int choice = 0; // Initialize choice
+    string input, input2;
+    vector<string> batchFiles;
+
+    while (choice != 12) {
+        cout << "\nFile Manager Menu:\n";
+        cout << "1. Navigate to Directory\n";
+        cout << "2. Show Directory History\n";
+        cout << "3. Create File\n";
+        cout << "4. Create Directory\n";
+        cout << "5. Delete File or Directory\n";
+        cout << "6. Batch Copy Files\n";
+        cout << "7. View File Properties\n";
+        cout << "8. Search Files\n";
+        cout << "9. Show Operation History\n";
+        cout << "10. Sort Files in Directory\n";
+        cout << "11. Move File or Directory\n";
+        cout << "12. Exit\n";
+        cout << "Enter your choice: ";
+
+        // Input validation for choice
+        if (!(cin >> choice)) {
+            cin.clear(); // Clear the error flag
+            cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Ignore invalid input
+            cout << "Invalid input. Please enter a valid number.\n";
+            continue; // Restart the loop
+        }
+
+        switch (choice) {
+            case 1:
+                cout << "Enter directory path: ";
+                cin >> input;
+                fm.navigateTo(input);
+                break;
+            case 2:
+                fm.showDirectoryHistory();
+                break;
+            case 3:
+                cout << "Enter file name to create: ";
+                cin >> input;
+                fm.createFile(input);
+                break;
+            case 4:
+                cout << "Enter directory name to create: ";
+                cin >> input;
+                fm.createDirectory(input);
+                break;
+            case 5:
+                cout << "Enter file/directory name to delete: ";
+                cin >> input;
+                fm.deleteFileOrDirectory(input);
+                break;
+            case 6:
+                batchFiles.clear();
+                int n;
+                cout << "Enter the number of files to copy: ";
+                if (!(cin >> n) || n <= 0) { // Validate n
+                    cin.clear();
+                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                    cout << "Invalid number of files. Please enter a positive integer.\n";
+                    continue;
+                }
+                for (int i = 0; i < n; ++i) {
+                    cout << "Enter file " << i + 1 << ": ";
+                    cin >> input;
+                    batchFiles.push_back(input);
+                }
+                cout << "Enter destination directory: ";
+                cin >> input2;
+                fm.batchCopy(batchFiles, input2);
+                break;
+            case 7:
+                cout << "Enter file name to view properties: ";
+                cin >> input;
+                fm.viewFileProperties(input);
+                break;
+            case 8:
+                cout << "Enter file name: ";
+                cin >> input;
+                cout << "Enter directory to search (or leave blank for current): ";
+                cin.ignore();
+                getline(cin, input2);
+                if (input2.empty()) input2 = ".";
+                fm.searchFiles(input, input2);
+                break;
+            case 9:
+                fm.showOperationHistory();
+                break;
+            case 10:
+                cout << "Enter directory to sort (or leave blank for current): ";
+                cin.ignore();
+                getline(cin, input);
+                if (input.empty()) input = ".";
+                cout << "Enter sorting criteria (name/size/time): ";
+                cin >> input2;
+                fm.sortFiles(input, input2);
+                break;
+            case 11:
+                cout << "Enter source file/directory path: ";
+                cin.ignore();
+                getline(cin, input);
+                cout << "Enter destination path: ";
+                getline(cin, input2);
+                fm.moveFileOrDirectory(input, input2);
+                break;
+            case 12:
+                cout << "Exiting...\n";
+                break;
+            default:
+                cout << "Invalid choice. Please try again.\n";
+                break;
+        }
+    }
+
+    return 0;
+}
+code chatgpt pe daal ke samajh lena
